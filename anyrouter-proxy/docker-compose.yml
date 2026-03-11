@@ -1,0 +1,7 @@
+version: "3"
+services:
+  anyrouter-proxy:
+    build: .
+    ports:
+      - "3001:3001"
+    restart: unless-stopped

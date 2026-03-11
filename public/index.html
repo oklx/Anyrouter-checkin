@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AnyRouter Panel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        serif: ['Georgia', 'Cambria', '"Times New Roman"', 'serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Noto Sans SC"', 'sans-serif'],
+      },
+    },
+  },
+};
+</script>
+<style>
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #c4b5a4; border-radius: 999px; }
+  ::selection { background: rgba(124,149,107,.2); }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(.96) translateY(.5rem); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .modal-anim { animation: modalIn .25s ease; }
+
+  /* Toast */
+  #toast {
+    position: fixed; top: 1.25rem; right: 1.25rem;
+    padding: .75rem 1.5rem; border-radius: 9999px;
+    color: #fff; font-size: .875rem; font-weight: 500;
+    z-index: 1000; pointer-events: none;
+    opacity: 0; transform: translateY(-.5rem);
+    transition: all .3s;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #toast.t-ok  { background: #7c956b; }
+  #toast.t-err { background: #c45c4a; }
+</style>
+</head>
+
+<body class="bg-[#f0ebe3] font-sans text-stone-800 min-h-screen antialiased text-sm md:text-base leading-relaxed">
+
+<!-- ===== Login ===== -->
+<div id="loginMask" class="fixed inset-0 bg-[#f0ebe3] z-[2000] flex items-center justify-center" style="display:none">
+  <div class="bg-[#faf6f1] rounded-[2rem] border border-stone-200 px-10 py-12 w-[380px] max-w-[calc(100vw-2rem)] text-center shadow-md">
+    <h2 class="font-serif text-2xl md:text-3xl text-stone-800 mb-2 font-bold">AnyRouter</h2>
+    <p class="text-sm text-stone-500 mb-7">请输入面板密码</p>
+    <input id="loginPwd" type="password" placeholder="密码"
+      class="w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+             placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+             transition-all duration-300 mb-5 text-sm"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="w-full px-6 py-3 rounded-full font-medium transition-colors duration-300
+                   bg-[#7c956b] text-white hover:bg-[#6b8259] active:scale-95"
+      onclick="doLogin()">登 录</button>
+  </div>
+</div>
+
+<!-- ===== Detail Modal ===== -->
+<div id="detailModal" class="fixed inset-0 bg-stone-900/40 backdrop-blur-sm z-[900] hidden items-center justify-center p-5">
+  <div class="bg-[#faf6f1] rounded-[2rem] border border-stone-200 p-6 md:p-8 w-[520px] max-w-full max-h-[85vh] overflow-y-auto shadow-md modal-anim">
+    <div class="flex items-center justify-between mb-5">
+      <h3 id="detailTitle" class="font-serif text-xl md:text-2xl text-stone-800 font-bold">详情</h3>
+      <button onclick="closeDetail()"
+        class="w-8 h-8 flex items-center justify-center rounded-full text-stone-400
+               hover:bg-stone-200 hover:text-stone-700 transition-colors duration-300 text-xl">&times;</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<!-- ===== Header ===== -->
+<header class="bg-stone-800 px-5 md:px-8 h-14 flex items-center justify-between sticky top-0 z-50">
+  <h1 class="font-serif text-lg text-white font-bold tracking-wide">AnyRouter</h1>
+  <button class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+                 text-white bg-white/10 border border-white/15 hover:bg-white/20 active:scale-95"
+    onclick="checkinAll()">全部签到</button>
+</header>
+
+<!-- ===== Main Content ===== -->
+<div class="max-w-[960px] mx-auto px-4 md:px-8 py-6 md:py-10" id="mainApp">
+
+  <!-- ── 统计概览 ── -->
+  <div class="bg-[#faf6f1] rounded-[2rem] border border-stone-200 mb-6 overflow-hidden">
+    <div class="px-6 md:px-8 py-4 border-b border-stone-200 flex items-center justify-between">
+      <span class="font-serif text-base md:text-lg font-bold text-stone-800">统计概览</span>
+      <button id="chartToggle"
+        class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+               text-stone-500 border border-stone-200 hover:bg-stone-100 active:scale-95"
+        style="display:none"
+        onclick="toggleChart()">余额趋势</button>
+    </div>
+    <div class="px-6 md:px-8 py-5">
+      <div class="flex gap-10 md:gap-16">
+        <div>
+          <div class="text-xs text-stone-500 font-semibold uppercase tracking-wider mb-1">账号数</div>
+          <div id="statAccounts" class="text-2xl md:text-3xl font-bold font-serif text-stone-800">-</div>
+        </div>
+        <div>
+          <div class="text-xs text-stone-500 font-semibold uppercase tracking-wider mb-1">余额总和</div>
+          <div id="statBalance" class="text-2xl md:text-3xl font-bold font-serif text-[#5a7a4a]">-</div>
+        </div>
+      </div>
+      <div id="chartWrap" style="display:none" class="mt-5">
+        <div class="h-[200px] md:h-[280px]">
+          <canvas id="balanceChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 账号管理 ── -->
+  <div class="bg-[#faf6f1] rounded-[2rem] border border-stone-200 mb-6 overflow-hidden">
+    <div class="px-6 md:px-8 py-4 border-b border-stone-200 flex items-center justify-between">
+      <span class="font-serif text-base md:text-lg font-bold text-stone-800">账号管理</span>
+      <button class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+                     bg-stone-800 text-white hover:bg-stone-700 active:scale-95"
+        onclick="showAddForm()">+ 添加</button>
+    </div>
+
+    <!-- Add Form -->
+    <div id="addForm" class="px-6 md:px-8 py-5 border-b border-stone-200 bg-stone-50/50" style="display:none">
+      <div class="space-y-3">
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">备注名称</label>
+          <input id="addName" placeholder="可选"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">Session</label>
+          <input id="addSession" placeholder="必填"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">账号</label>
+          <input id="addMemoAcc" placeholder="选填"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">密码</label>
+          <input id="addMemoPwd" placeholder="选填"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">API Key</label>
+          <input id="addMemoKey" placeholder="sk-xxx，选填"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">备注</label>
+          <input id="addMemoNote" placeholder="选填"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+          <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">代理地址</label>
+          <input id="addProxyUrl" placeholder="http://1.2.3.4:3001，选填"
+            class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                   placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                   transition-all duration-300 text-sm">
+        </div>
+      </div>
+      <div class="flex gap-2 justify-end mt-4">
+        <button class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+                       text-stone-500 border border-stone-200 hover:bg-stone-100 active:scale-95"
+          onclick="showAddForm()">取消</button>
+        <button class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+                       bg-[#7c956b] text-white hover:bg-[#6b8259] active:scale-95"
+          onclick="addAccount()">保存</button>
+      </div>
+    </div>
+
+    <!-- Table (desktop) -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm hidden md:table">
+        <thead>
+          <tr class="bg-stone-50/80">
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">名称</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">Session</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">余额</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">状态</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">启停</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">操作</th>
+          </tr>
+        </thead>
+        <tbody id="accBody" class="divide-y divide-stone-100"></tbody>
+      </table>
+      <!-- Cards (mobile) -->
+      <div id="accCards" class="md:hidden"></div>
+    </div>
+    <div id="accPagination"></div>
+    <div id="accEmpty" class="text-center py-12 text-stone-400 text-sm" style="display:none">暂无账号，点击上方「+ 添加」开始</div>
+  </div>
+
+  <!-- ── 签到日志 ── -->
+  <div class="bg-[#faf6f1] rounded-[2rem] border border-stone-200 mb-6 overflow-hidden">
+    <div class="px-6 md:px-8 py-4 border-b border-stone-200 flex items-center justify-between">
+      <span class="font-serif text-base md:text-lg font-bold text-stone-800">签到日志</span>
+      <button class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+                     text-stone-500 border border-stone-200 hover:bg-stone-100 active:scale-95"
+        onclick="clearLogs()">清空</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm hidden md:table">
+        <thead>
+          <tr class="bg-stone-50/80">
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">时间</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">账号</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">结果</th>
+            <th class="px-6 py-3 text-left text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-200">消息</th>
+          </tr>
+        </thead>
+        <tbody id="logBody" class="divide-y divide-stone-100"></tbody>
+      </table>
+      <div id="logCards" class="md:hidden"></div>
+    </div>
+    <div id="logPagination"></div>
+    <div id="logEmpty" class="text-center py-12 text-stone-400 text-sm" style="display:none">暂无日志</div>
+  </div>
+
+  <!-- ── 系统设置 ── -->
+  <div class="bg-[#faf6f1] rounded-[2rem] border border-stone-200 mb-6 overflow-hidden">
+    <div class="px-6 md:px-8 py-4 border-b border-stone-200">
+      <span class="font-serif text-base md:text-lg font-bold text-stone-800">系统设置</span>
+    </div>
+    <div class="px-6 md:px-8 py-6 space-y-3">
+      <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+        <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">上游地址</label>
+        <input id="sUpstream"
+          class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                 placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                 transition-all duration-300 text-sm">
+      </div>
+      <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+        <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">Cron</label>
+        <input id="sCron" placeholder="0 9 * * *"
+          class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                 placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                 transition-all duration-300 text-sm">
+      </div>
+      <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+        <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">TG Token</label>
+        <input id="sTgToken"
+          class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                 placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                 transition-all duration-300 text-sm">
+      </div>
+      <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+        <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">TG Chat ID</label>
+        <input id="sTgChat"
+          class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                 placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                 transition-all duration-300 text-sm">
+      </div>
+      <div class="flex flex-col md:flex-row gap-2 md:gap-3 items-start md:items-center">
+        <label class="text-sm text-stone-500 font-semibold md:min-w-[80px]">面板密码</label>
+        <input id="sPanelPwd" type="password" placeholder="留空则无需密码"
+          class="flex-1 w-full px-5 py-3 bg-white border border-stone-200 rounded-full text-stone-800
+                 placeholder:text-stone-400 focus:border-stone-400 focus:ring-2 focus:ring-stone-200
+                 transition-all duration-300 text-sm">
+      </div>
+      <div class="flex justify-end mt-4">
+        <button class="px-4 py-2 rounded-full font-medium transition-colors duration-300 text-sm
+                       bg-[#7c956b] text-white hover:bg-[#6b8259] active:scale-95"
+          onclick="saveSettings()">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

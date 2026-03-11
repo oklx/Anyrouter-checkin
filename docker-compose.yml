@@ -1,0 +1,14 @@
+services:
+  anyrouter:
+    build: .
+    container_name: anyrouter-panel
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - data:/data
+    environment:
+      - TZ=Asia/Shanghai
+
+volumes:
+  data:

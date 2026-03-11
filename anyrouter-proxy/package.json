@@ -1,0 +1,12 @@
+{
+  "name": "anyrouter-proxy",
+  "version": "1.0.0",
+  "description": "AnyRouter 签到代理转发服务",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
